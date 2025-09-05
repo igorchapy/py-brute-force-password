@@ -1,7 +1,6 @@
 import time
 from hashlib import sha256
-from multiprocessing import Pool, cpu_count
-
+from multiprocessing import Pool, cpu_count, Manager
 
 PASSWORDS_TO_BRUTE_FORCE = [
     "b4061a4bcfe1a2cbf78286f3fab2fb578266d1bd16c414c650c5ac04dfc696e1",
@@ -23,41 +22,37 @@ def sha256_hash_str(to_hash: str) -> str:
     return sha256(to_hash.encode("utf-8")).hexdigest()
 
 
-def worker(start: int, end: int):
-    """Функція для одного процеса: перебирає свій діапазон чисел."""
-    local_found = {}
+def worker(start: int, end: int, found_dict):
     for i in range(start, end):
         candidate = f"{i:08d}"
         candidate_hash = sha256_hash_str(candidate)
 
         if candidate_hash in target_hashes:
-            local_found[candidate_hash] = candidate
-            print(f"Found: {candidate} -> {candidate_hash}")
+            found_dict[candidate_hash] = candidate
 
-            if len(local_found) == len(target_hashes):
+
+            if len(found_dict) >= len(target_hashes):
                 break
-    return local_found
 
 
 def brute_force_password():
-    num_processes = cpu_count()  # скільки ядер у процесора
-    print(f"Using {num_processes} processes...")
-
+    num_processes = cpu_count()
     chunk_size = 100_000_000 // num_processes
     ranges = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
 
-    found = {}
-    with Pool(processes=num_processes) as pool:
-        for result in pool.starmap(worker, ranges):
-            found.update(result)
+    manager = Manager()
+    found = manager.dict()
 
-    print("\nAll passwords recovered:")
-    for h, p in found.items():
-        print(f"{h} -> {p}")
+    with Pool(processes=num_processes) as pool:
+        pool.starmap(worker, [(start, end, found) for start, end in ranges])
+
+
+    for password in found.values():
+        print(password)
 
 
 if __name__ == "__main__":
     start_time = time.perf_counter()
     brute_force_password()
     end_time = time.perf_counter()
-    print("Elapsed:", end_time - start_time)
+    print(f"Elapsed: {end_time - start_time:.2f} seconds")
