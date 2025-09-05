@@ -1,5 +1,6 @@
 import time
 from hashlib import sha256
+from multiprocessing import Pool, cpu_count
 
 
 PASSWORDS_TO_BRUTE_FORCE = [
@@ -15,18 +16,48 @@ PASSWORDS_TO_BRUTE_FORCE = [
     "e5f3ff26aa8075ce7513552a9af1882b4fbc2a47a3525000f6eb887ab9622207",
 ]
 
+target_hashes = set(PASSWORDS_TO_BRUTE_FORCE)
+
 
 def sha256_hash_str(to_hash: str) -> str:
     return sha256(to_hash.encode("utf-8")).hexdigest()
 
 
-def brute_force_password() -> None:
-    pass
+def worker(start: int, end: int):
+    """Функція для одного процеса: перебирає свій діапазон чисел."""
+    local_found = {}
+    for i in range(start, end):
+        candidate = f"{i:08d}"
+        candidate_hash = sha256_hash_str(candidate)
+
+        if candidate_hash in target_hashes:
+            local_found[candidate_hash] = candidate
+            print(f"Found: {candidate} -> {candidate_hash}")
+
+            if len(local_found) == len(target_hashes):
+                break
+    return local_found
+
+
+def brute_force_password():
+    num_processes = cpu_count()  # скільки ядер у процесора
+    print(f"Using {num_processes} processes...")
+
+    chunk_size = 100_000_000 // num_processes
+    ranges = [(i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+
+    found = {}
+    with Pool(processes=num_processes) as pool:
+        for result in pool.starmap(worker, ranges):
+            found.update(result)
+
+    print("\nAll passwords recovered:")
+    for h, p in found.items():
+        print(f"{h} -> {p}")
 
 
 if __name__ == "__main__":
     start_time = time.perf_counter()
     brute_force_password()
     end_time = time.perf_counter()
-
     print("Elapsed:", end_time - start_time)
